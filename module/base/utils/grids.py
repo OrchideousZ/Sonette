@@ -1,3 +1,7 @@
+'''
+网格处理模块。定义了 SelectedGrids 类，用于管理一组网格对象（Grid），提供筛选、索引、排序和集合运算功能。这在处理地图格子、背包物品格子等场景中非常有用。
+'''
+
 import operator
 import typing as t
 

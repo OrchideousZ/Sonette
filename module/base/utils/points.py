@@ -1,3 +1,7 @@
+'''
+点和线的几何处理模块。提供了 Points 类用于处理点集（如聚类、求均值），Lines 类用于处理直线（如霍夫变换检测到的线），以及一系列坐标转换和几何计算函数。
+'''
+
 import numpy as np
 from scipy import optimize
 
@@ -5,6 +9,11 @@ from .utils import area_pad
 
 
 class Points:
+    """
+    作用：点集包装类。
+    封装了 numpy 数组，提供方便的点集操作方法。
+    """
+
     def __init__(self, points):
         if points is None or len(points) == 0:
             self._bool = False
@@ -37,23 +46,43 @@ class Points:
         return self._bool
 
     def link(self, point, is_horizontal=False):
+        """
+        作用：将点集中的每个点与指定点连接，生成直线集合。
+
+        Args:
+            point: 目标点 (x, y)。
+            is_horizontal: 是否生成水平线。
+        """
         if is_horizontal:
             lines = [[y, np.pi / 2] for y in self.y]
             return Lines(lines, is_horizontal=True)
         else:
             x, y = point
+            # 计算极坐标参数 rho, theta
             theta = -np.arctan((self.x - x) / (self.y - y))
             rho = self.x * np.cos(theta) + self.y * np.sin(theta)
             lines = np.array([rho, theta]).T
             return Lines(lines, is_horizontal=False)
 
     def mean(self):
+        """
+        计算点集的中心点（均值）。
+        """
         if not self:
             return None
 
         return np.round(np.mean(self.points, axis=0)).astype(int)
 
     def group(self, threshold=3):
+        """
+        作用：将距离相近的点聚类，返回每组的中心点。
+
+        Args:
+            threshold: 距离阈值。
+
+        Returns:
+            np.array: 聚类后的点集。
+        """
         if not self:
             return np.array([])
         groups = []
@@ -63,16 +92,23 @@ class Points:
 
         while len(points):
             p0, p1 = points[0], points[1:]
+            # 计算距离
             distance = np.sum(np.abs(p1 - p0), axis=1)
+            # 找到距离小于阈值的点，归为一组，计算均值
             new = Points(np.append(p1[distance <= threshold], [p0], axis=0)).mean().tolist()
             groups.append(new)
+            # 剩余的点继续处理
             points = p1[distance > threshold]
 
         return np.array(groups)
 
 
 class Lines:
-    MID_Y = 360
+    """
+    作用：直线集合包装类。
+    使用极坐标 (rho, theta) 表示直线。
+    """
+    MID_Y = 360  # 屏幕中心 Y 坐标，用于计算中点
 
     def __init__(self, lines, is_horizontal):
         if lines is None or len(lines) == 0:
@@ -116,11 +152,15 @@ class Lines:
 
     @property
     def mean(self):
+        """
+        计算直线的平均值。
+        """
         if not self:
             return None
         if self.is_horizontal:
             return np.mean(self.lines, axis=0)
         else:
+            # 对于非水平线，先计算中点 X 坐标的均值，再还原回 rho
             x = np.mean(self.mid)
             theta = np.mean(self.theta)
             rho = x * np.cos(theta) + self.MID_Y * np.sin(theta)
@@ -128,6 +168,9 @@ class Lines:
 
     @property
     def mid(self):
+        """
+        计算直线在 MID_Y 处的 X 坐标（如果是水平线则为 rho）。
+        """
         if not self:
             return np.array([])
         if self.is_horizontal:
@@ -136,12 +179,15 @@ class Lines:
             return (self.rho - self.MID_Y * self.sin) / self.cos
 
     def get_x(self, y):
+        """根据 Y 计算 X"""
         return (self.rho - y * self.sin) / self.cos
 
     def get_y(self, x):
+        """根据 X 计算 Y"""
         return (self.rho - x * self.cos) / self.sin
 
     def add(self, other):
+        """合并两个直线集合"""
         if not other:
             return self
         if not self:
@@ -150,6 +196,7 @@ class Lines:
         return Lines(lines, is_horizontal=self.is_horizontal)
 
     def move(self, x, y):
+        """平移直线"""
         if not self:
             return self
         if self.is_horizontal:
@@ -159,12 +206,16 @@ class Lines:
         return Lines(self.lines, is_horizontal=self.is_horizontal)
 
     def sort(self):
+        """根据中点位置排序"""
         if not self:
             return self
         lines = self.lines[np.argsort(self.mid)]
         return Lines(lines, is_horizontal=self.is_horizontal)
 
     def group(self, threshold=3):
+        """
+        将相近的直线聚类合并。
+        """
         if not self:
             return self
         lines = self.sort()
@@ -188,11 +239,13 @@ class Lines:
         return Lines(regrouped, is_horizontal=self.is_horizontal)
 
     def distance_to_point(self, point):
+        """计算点到直线的距离"""
         x, y = point
         return self.rho - x * self.cos - y * self.sin
 
     @staticmethod
     def cross_two_lines(lines1, lines2):
+        """计算两组直线的交点"""
         for rho1, sin1, cos1 in zip(lines1.rho, lines1.sin, lines1.cos):
             for rho2, sin2, cos2 in zip(lines2.rho, lines2.sin, lines2.cos):
                 a = np.array([[cos1, sin1], [cos2, sin2]])
@@ -200,11 +253,13 @@ class Lines:
                 yield np.linalg.solve(a, b)
 
     def cross(self, other):
+        """计算与另一组直线的交点"""
         points = np.vstack(self.cross_two_lines(self, other))
         points = Points(points)
         return points
 
     def delete(self, other, threshold=3):
+        """删除与 other 中直线相近的直线"""
         if not self:
             return self
 
@@ -224,7 +279,7 @@ def area2corner(area):
         area: (x1, y1, x2, y2)
 
     Returns:
-        np.ndarray: [upper-left, upper-right, bottom-left, bottom-right]
+        np.ndarray: [左上, 右上, 左下, 右下] 四个角点坐标
     """
     return np.array([[area[0], area[1]], [area[2], area[1]], [area[0], area[3]], [area[2], area[3]]])
 
@@ -232,10 +287,10 @@ def area2corner(area):
 def corner2area(corner):
     """
     Args:
-        corner: [upper-left, upper-right, bottom-left, bottom-right]
+        corner: [左上, 右上, 左下, 右下]
 
     Returns:
-        np.ndarray: (x1, y1, x2, y2)
+        np.ndarray: (x1, y1, x2, y2) 包围盒
     """
     x, y = np.array(corner).T
     return np.rint([np.min(x), np.min(y), np.max(x), np.max(y)]).astype(int)
@@ -243,7 +298,7 @@ def corner2area(corner):
 
 def corner2inner(corner):
     """
-    The largest rectangle inscribed in trapezoid.
+    获取梯形内的最大内接矩形。
 
     Args:
         corner: ((x0, y0), (x1, y1), (x2, y2), (x3, y3))
@@ -258,7 +313,7 @@ def corner2inner(corner):
 
 def corner2outer(corner):
     """
-    The smallest rectangle circumscribed by the trapezoid.
+    获取梯形的最小外接矩形。
 
     Args:
         corner: ((x0, y0), (x1, y1), (x2, y2), (x3, y3))
@@ -273,13 +328,13 @@ def corner2outer(corner):
 
 def trapezoid2area(corner, pad=0):
     """
-    Convert corners of a trapezoid to area.
+    将梯形角点转换为矩形区域。
 
     Args:
         corner: ((x0, y0), (x1, y1), (x2, y2), (x3, y3))
         pad (int):
-            Positive value for inscribed area.
-            Negative value and 0 for circumscribed area.
+            正值：内接矩形并内缩 pad。
+            负值或0：外接矩形并内缩 pad。
 
     Returns:
         tuple[int]: (upper_left_x, upper_left_y, bottom_right_x, bottom_right_y).
@@ -294,12 +349,14 @@ def trapezoid2area(corner, pad=0):
 
 def points_to_area_generator(points, shape):
     """
+    将网格点转换为区域生成器。
+
     Args:
-        points (np.ndarray): N x 2 array.
-        shape (tuple): (x, y).
+        points (np.ndarray): N x 2 数组。
+        shape (tuple): (x, y) 网格形状。
 
     Yields:
-        tuple, np.ndarray: (x, y), [upper-left, upper-right, bottom-left, bottom-right]
+        tuple, np.ndarray: ((x, y), [四个角点])
     """
     points = points.reshape(*shape[::-1], 2)
     for y in range(shape[1] - 1):
@@ -310,11 +367,7 @@ def points_to_area_generator(points, shape):
 
 def get_map_inner(points):
     """
-    Args:
-        points (np.ndarray): N x 2 array.
-
-    Yields:
-        np.ndarray: (x, y).
+    获取点集的中心点。
     """
     points = np.array(points)
     if len(points.shape) == 1:
@@ -325,12 +378,14 @@ def get_map_inner(points):
 
 def separate_edges(edges, inner):
     """
+    根据内部点将边缘分为上下两部分。
+
     Args:
-        edges: A iterate object which contains float ot integer.
-        inner (float, int): A inner point to separate edges.
+        edges: 边缘坐标列表。
+        inner (float, int): 分隔点。
 
     Returns:
-        float, float: Lower edge and upper edge. if not found, return None
+        float, float: 下边缘和上边缘。
     """
     if len(edges) == 0:
         return None, None
@@ -347,13 +402,14 @@ def separate_edges(edges, inner):
 
 def perspective_transform(points, data):
     """
+    透视变换。
+
     Args:
-        points: A 2D array with shape (n, 2)
-        data: Perspective data, a 2D array with shape (3, 3),
-            see https://web.archive.org/web/20150222120106/xenia.media.mit.edu/~cwren/interpolator/
+        points: 2D 数组 (n, 2)
+        data: 透视变换矩阵 (3, 3)
 
     Returns:
-        np.ndarray: 2D array with shape (n, 2)
+        np.ndarray: 变换后的点集
     """
     points = np.pad(np.array(points), ((0, 0), (0, 1)), mode='constant', constant_values=1)
     matrix = data.dot(points.T)
@@ -364,17 +420,16 @@ def perspective_transform(points, data):
 
 def fit_points(points, mod, encourage=1):
     """
-    Get a closet point in a group of points with common difference.
-    Will ignore points in the distance.
+    将一组点拟合到网格上。
+    用于在图像上找到最符合网格分布的点。
 
     Args:
-        points: Points on image, a 2D array with shape (n, 2)
-        mod: Common difference of points, (x, y).
-        encourage (int, float): Describe how close to fit a group of points, in pixel.
-            Smaller means closer to local minimum, larger means closer to global minimum.
+        points: 图像上的点集 (n, 2)
+        mod: 点的公差/间距 (x, y)。
+        encourage (int, float): 拟合紧密度参数。
 
     Returns:
-        np.ndarray: (x, y)
+        np.ndarray: 最佳拟合偏移量 (x, y)
     """
     encourage = np.square(encourage)
     mod = np.array(mod)
@@ -385,11 +440,7 @@ def fit_points(points, mod, encourage=1):
         distance = np.linalg.norm(points - point, axis=1)
         return np.sum(1 / (1 + np.exp(encourage / distance) / distance))
 
-    # Fast local minimizer
-    # result = optimize.minimize(cal_distance, np.mean(points, axis=0), method='SLSQP')
-    # return result['x'] % mod
-
-    # Brute-force global minimizer
+    # 暴力搜索全局最小值
     area = np.append(-mod - 10, mod + 10)
     result = optimize.brute(cal_distance, ((area[0], area[2]), (area[1], area[3])))
     return result % mod
