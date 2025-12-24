@@ -1,7 +1,7 @@
 # Sonette
 Return to The Future 1999 Copilot
 
-基于全新ALAS框架构造的重返未来1999小助手
+基于全新ALAS框架构造的重返未来1999小助手(base: StarRailCopilot v0.5.7)
 
 目前规划的功能有：每日刷关(活动/指定主线关卡/心相本)、每日领取奖励、领取荒原奖励、每周领取人工梦游奖励、吃体力药
 
