@@ -25,7 +25,9 @@ class Wilderness(ModuleBase):
         timeout = Timer(5 * 60).start()
 
         # 4. 定义干扰项 (看见就点)
-        POPUP_INTERRUPTS = ['btn_cancel', 'btn_confirm', 'btn_skip']
+        POPUP_INTERRUPTS = ['btn_cancel',
+                            'btn_confirm',
+                            'btn_skip']
 
         # ================= Loop Start =================
         while 1:
@@ -57,7 +59,7 @@ class Wilderness(ModuleBase):
                     continue
 
             # --------------------------------------------------
-            # 优先级 1: 处理弹窗 (干扰项)
+            # 优先级 1: 处理弹窗 (断线重连)
             # --------------------------------------------------
             handled_popup = False
             for popup in POPUP_INTERRUPTS:
@@ -66,27 +68,32 @@ class Wilderness(ModuleBase):
                     self.device.click_result(detection_map[popup])
                     handled_popup = True
                     break
-            if handled_popup: continue
+            if handled_popup: continue  # 这轮处理完了一个弹窗，不执行后面的代码，直接进入下一轮重新取画面
 
             # --------------------------------------------------
-            # 优先级 2: 核心收菜 (在大厅内)
+            # 优先级 2: 收菜 (在荒原古厅内)
             # --------------------------------------------------
             if 'btn_resource' in detection_map:
                 logger.info("Action: Claim Resources")
                 resource_btns = [item for item in detection_list if item['label'] == 'btn_resource']
 
+                # 全部收菜按钮点击两轮
                 for btn in resource_btns:
                     self.device.click_result(btn, sleep_time=0.5)  # 快速连点
-                # 假设点一次就收完了，或者多点几次
+                self.device.sleep(2)
+                for btn in resource_btns:
+                    self.device.click_result(btn, sleep_time=0.5)  # 快速连点
                 self.device.sleep(2)
 
-                # 再次扫描确认是否还有资源按钮，如果没有了，标记完成
-                # 这里简单处理：点过一次就认为完成了，触发返回逻辑
+                # 简单处理：点过一次就认为完成了，触发返回逻辑
                 self.resources_claimed = True
+                # 回荒原主界面
+                self.device.yolo_click("btn_back")
                 continue
+                # 也可以再次扫描确认是否还有资源按钮，如果没有了，标记完成
 
             # --------------------------------------------------
-            # 优先级 3: 摸头/好感度 (在荒原地图)
+            # 优先级 3: 摸头 (在荒原主界面)
             # --------------------------------------------------
             if 'bubble_bond' in detection_map and self.bond_clicked_count < 5:
                 logger.info("Action: Click Bond Bubble")
@@ -94,7 +101,9 @@ class Wilderness(ModuleBase):
                 self.bond_clicked_count += 1
                 continue
 
-            # --- 进入好梦井 (在大厅) ---
+            # --------------------------------------------------
+            # 优先级 4: 进入好梦井 (在荒原主界面)
+            # --------------------------------------------------
             # 场景：在荒原主页看到了井，且还没收过
             if 'icon_well' in detection_map and not self.well_processed:
                 logger.info("Action: Enter Wishing Well")
@@ -103,10 +112,9 @@ class Wilderness(ModuleBase):
                 continue
 
             # --------------------------------------------------
-            # 优先级 4: 导航逻辑 (进大厅 > 进荒原)
+            # 优先级 5: 导航逻辑 (进大厅 > 进荒原)
             # --------------------------------------------------
-
-            # A. 如果在荒原地图，看到了大厅入口 (icon_home = 建筑模型)
+            # A. 如果在荒原地图，看到了大厅入口 (icon_home = 荒原古厅的icon)
             if 'icon_home' in detection_map:
                 if not self.resources_claimed:
                     logger.info("Action: Enter Paleohall (icon_home)")
@@ -123,8 +131,8 @@ class Wilderness(ModuleBase):
             # 好梦井 (Wishing Well) 核心逻辑
             # ======================================================
 
-            # 场景：检测到有好梦井的“剩余数量”标签，说明打开了好梦井界面
-            if 'well_remain' in detection_map and not self.well_processed:
+            # 场景：检测到有好梦井的“打捞”标签，说明打开了好梦井界面
+            if 'well_produce' in detection_map and not self.well_processed:
 
                 # 1. OCR 识别剩余数量
                 text = self.device.ocr_yolo_box(detection_map['well_remain'])
@@ -143,9 +151,9 @@ class Wilderness(ModuleBase):
                         if 'well_produce' in detection_map:
                             self.device.click_result(detection_map['well_produce'], sleep_time=1)
 
-                            # 4. 根据数量选择次数
-                            # 注意：点击 produce 后，次数按钮才会浮现，
-                            # 这里做一个简单的内层查找，或者等下一轮循环检测 well_timeX
+                            # 根据数量选择次数
+                            # 注意：点击 well_produce 后，次数按钮才会浮现，
+                            # 这里做一个简单的内层查找，也可以等下一轮循环检测 well_timeX
                             # 为了连贯性，这里用 yolo_click 快速点掉
 
                             target_btn = None
@@ -161,7 +169,7 @@ class Wilderness(ModuleBase):
                             logger.info(f"Selecting harvest amount: {target_btn}")
 
                             # 尝试点击对应的次数按钮
-                            # 因为刚才点了 produce，界面变了，最好重新截个图或直接盲点 YOLO
+                            # 因为刚才点了 well_produce，界面变了，最好重新截个图或直接盲点 YOLO
                             # 建议：这里直接调用 yolo_click 实时查找
                             if self.device.yolo_click(target_btn, sleep_time=2):
                                 logger.info("Harvest confirmed.")
@@ -174,7 +182,7 @@ class Wilderness(ModuleBase):
                 else:
                     logger.warning(f"OCR failed to parse number from: {text}")
 
-                # 标记为已处理，避免死循环 (或者你可以依靠 remain_count == 0 来跳出)
+                # 标记为已处理，避免死循环 (或者可以依靠 remain_count == 0 来跳出)
                 # 建议处理一次后就标记 True，防止OCR读错导致死循环
                 self.well_processed = True
 
@@ -183,7 +191,7 @@ class Wilderness(ModuleBase):
                 continue
 
             # --------------------------------------------------
-            # 兜底
+            # 什么都没识别到，进Idle
             # --------------------------------------------------
             logger.info("Idle... Waiting for UI update.")
             self.device.sleep(1)

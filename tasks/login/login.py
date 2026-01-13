@@ -53,7 +53,7 @@ class Login(ModuleBase):
                 self.device.click_result(detection_map['btn_start'], sleep_time=4)
                 continue  # 点完动作后，重新下一轮扫描
 
-            # --- 找到了荒原入口，启动成功 ---
+            # --- 看到了荒原入口，启动成功 ---
             if 'icon_wilderness' in detection_map:
                 logger.info("Detected Home Screen (Wilderness Icon). Login Success.")
                 break  # 退出循环
