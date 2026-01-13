@@ -1,5 +1,7 @@
 import collections
 import itertools
+from module.yolo.inference import yolo_agent  # 确保这里正确导入
+import random
 
 from lxml import etree
 
@@ -23,6 +25,17 @@ from module.exception import (
 )
 from module.logger import logger
 
+class YoloTarget:
+    """
+    一个极简的点击目标包装类，专门骗过 ALAS 的 click 函数
+    """
+    def __init__(self, box, name="YoloTarget"):
+        # box 格式: (x1, y1, x2, y2)
+        self.button = box  # ALAS 的 random_rectangle_point 需要读取这个属性
+        self.name = name   # 日志记录需要读取这个属性
+
+    def __str__(self):
+        return self.name
 
 def show_function_call():
     """
@@ -304,3 +317,57 @@ class Device(Screenshot, Control, AppControl):
         super().app_stop()
         self.stuck_record_clear()
         self.click_record_clear()
+
+    # =========================================================================
+    # YOLO AI Extensions (Fixed Version)
+    # =========================================================================
+
+    def yolo_find(self, target_label, conf=0.5):
+        """
+        使用 YOLO 寻找单个目标
+        Returns:
+            dict: {'label':..., 'box': [x1, y1, x2, y2], 'center': (cx, cy)} 或 None
+        """
+        screenshot = self.screenshot()
+        detections = yolo_agent.predict(screenshot, conf_thres=conf)
+
+        for item in detections:
+            if item['label'] == target_label:
+                return item
+        return None
+
+    def yolo_find_all(self, target_label, conf=0.5):
+        """
+        使用 YOLO 寻找所有匹配的目标
+        """
+        screenshot = self.screenshot()
+        detections = yolo_agent.predict(screenshot, conf_thres=conf)
+        return [d for d in detections if d['label'] == target_label]
+
+    def yolo_click(self, target_label, conf=0.5, sleep_time=1):
+        """
+        使用 YOLO 查找并点击目标 (使用轻量化 YoloTarget 绕过 ALAS Button 限制)
+        """
+        item = self.yolo_find(target_label, conf)
+
+        if item:
+            # 1. 提取坐标框并转为元组
+            box = tuple(item['box'])
+
+            # 2. 实例化我们自己写的轻量级对象 (鸭子类型)
+            # 这不需要 file, search 等一堆废话参数
+            target = YoloTarget(box=box, name=target_label)
+
+            logger.info(f'YOLO Click: {target_label} @ {box} (Conf: {item["conf"]:.2f})')
+
+            # 3. 调用 ALAS 底层的点击
+            # self.click 内部只关心 target.button 属性，所以这能完美运行
+            self.click(target)
+
+            # 4. 记录防卡死
+            self.handle_control_check(target)
+
+            self.sleep(sleep_time)
+            return True
+
+        return False

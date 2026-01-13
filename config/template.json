@@ -1,9 +1,9 @@
 {
   "Alas": {
     "Emulator": {
-      "Serial": "auto",
+      "Serial": "127.0.0.1:16384",
       "GameClient": "android",
-      "PackageName": "auto",
+      "PackageName": "com.shenlan.m.reverse1999",
       "GameLanguage": "auto",
       "ScreenshotMethod": "scrcpy",
       "ControlMethod": "MaaTouch",
@@ -37,7 +37,7 @@
   },
   "Dungeon": {
     "Scheduler": {
-      "Enable": true,
+      "Enable": false,
       "NextRun": "2020-01-01 00:00:00",
       "Command": "Dungeon",
       "ServerUpdate": "04:00"
@@ -178,7 +178,7 @@
   },
   "DailyQuest": {
     "Scheduler": {
-      "Enable": true,
+      "Enable": false,
       "NextRun": "2020-01-01 00:00:00",
       "Command": "DailyQuest",
       "ServerUpdate": "04:00"
@@ -190,7 +190,7 @@
   },
   "BattlePass": {
     "Scheduler": {
-      "Enable": true,
+      "Enable": false,
       "NextRun": "2020-01-01 00:00:00",
       "Command": "BattlePass",
       "ServerUpdate": "04:00"
@@ -210,7 +210,7 @@
   },
   "Assignment": {
     "Scheduler": {
-      "Enable": true,
+      "Enable": false,
       "NextRun": "2020-01-01 00:00:00",
       "Command": "Assignment",
       "ServerUpdate": "04:00"
@@ -228,7 +228,7 @@
   },
   "DataUpdate": {
     "Scheduler": {
-      "Enable": true,
+      "Enable": false,
       "NextRun": "2020-01-01 00:00:00",
       "Command": "DataUpdate",
       "ServerUpdate": "04:00"
@@ -245,7 +245,7 @@
   },
   "Freebies": {
     "Scheduler": {
-      "Enable": true,
+      "Enable": false,
       "NextRun": "2020-01-01 00:00:00",
       "Command": "Freebies",
       "ServerUpdate": "04:00"
