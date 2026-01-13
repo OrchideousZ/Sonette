@@ -18,77 +18,59 @@ class Login(ModuleBase):
         self.device.app_stop()
 
     def run(self):
-        logger.info("Script Start: Login & Harvest")
-
-        # 启动应用
+        logger.info("Script Start: Waiting for Log in")
         self.app_start()
 
-        # ===========================================
-        # 阶段一：登录循环 (直到检测到主页)
-        # ===========================================
+        # 超时保护
         timeout = Timer(5 * 60).start()
+
+        # 定义需要处理的弹窗列表 (通用干扰项)
+        # 只要屏幕上出现这些，就优先点掉
+        POPUP_INTERRUPTS = [
+            'btn_cancel',  # 通用关闭
+            'btn_confirm',  # 签到确认
+            'btn_skip',  # 跳过剧情
+        ]
 
         while 1:
             if timeout.reached():
-                logger.warning("Login timeout! Game stuck.")
+                logger.warning("Login timeout!")
                 break
 
-            # 成功检测：找到主页的荒原入口
-            if self.device.yolo_find("icon_wilderness"):
-                logger.info("Detected Home Screen! Login Success.")
-                break
+            # 1. [感知] 看一眼屏幕，获取所有信息
+            # detection_list 是列表，detection_map 是字典 {'label': item}
+            detection_list, detection_map = self.device.scan_screen(conf=0.6)
 
-            # 过程处理：点击开始
-            if self.device.yolo_click("btn_start", sleep_time=5):
-                logger.info("Clicked Start Game")
+            # 调试日志：看看当前看见了啥 (可选)
+            # labels = [d['label'] for d in detection_list]
+            # logger.info(f"Screen Scan: {labels}")
+
+            # 2. [决策] 状态机判断
+
+            # --- 登录 ---
+            if 'btn_start' in detection_map:
+                logger.info("Action: Start Game")
+                self.device.click_result(detection_map['btn_start'], sleep_time=4)
+                continue  # 点完动作后，重新下一轮扫描
+
+            # --- 找到了荒原入口，启动成功 ---
+            if 'icon_wilderness' in detection_map:
+                logger.info("Detected Home Screen (Wilderness Icon). Login Success.")
+                break  # 退出循环
+
+            # --- 异常处理 (通用弹窗) ---
+            # 遍历干扰项列表，看看当前屏幕上有没有
+            handled_popup = False
+            for popup_label in POPUP_INTERRUPTS:
+                if popup_label in detection_map:
+                    logger.info(f"Action: Handle Popup ({popup_label})")
+                    self.device.click_result(detection_map[popup_label], sleep_time=1)
+                    handled_popup = True
+                    break  # 一次只点一个，点完重新扫描
+
+            if handled_popup:
                 continue
 
-            # 过程处理：关闭弹窗
-            if self.device.yolo_click("btn_cancel", sleep_time=1):
-                logger.info("Closed popup")
-                continue
-
-            self.device.sleep(1)
-
-        # ===========================================
-        # 阶段二：荒原收菜流程
-        # 逻辑：主页 -> 荒原 -> 大厅(icon_home) -> 收取(btn_resource)
-        # ===========================================
-        logger.info("Starting Wilderness Routine...")
-
-        # 1. 点击进入荒原
-        if self.device.yolo_click("icon_wilderness", sleep_time=4):
-            logger.info("Entered Wilderness Map")
-
-            # 2. 点击进入大厅 (icon_home)
-            # 这里可能需要多试几次，防止地图没加载出来
-            hall_entered = False
-            for _ in range(3):
-                if self.device.yolo_click("icon_home", sleep_time=2):
-                    logger.info("Entered Paleohall (icon_home)")
-                    hall_entered = True
-                    break
-                self.device.sleep(1)
-
-            if hall_entered:
-                # 3. 点击资源收取 (btn_resource)
-                # 假设点这个按钮就直接收了，或者弹个窗
-                if self.device.yolo_click("btn_resource", sleep_time=2):
-                    logger.info("Resources Collected (btn_resource clicked)")
-
-                    # (可选) 如果收完需要点空白处或返回，可以在这里加
-                    # self.device.yolo_click("btn_cancel")
-                else:
-                    logger.warning("btn_resource not found (Maybe already collected?)")
-
-                # 4. (可选) 返回主页
-                # 如果你需要收完菜回到游戏主菜单，可以在这里加 btn_back 或 btn_home(注意标签名别搞混)
-                # self.device.yolo_click("btn_back")
-
-            else:
-                logger.warning("Failed to find 'icon_home' in Wilderness.")
-
-        else:
-            logger.warning("Failed to find 'icon_wilderness' on Main Menu.")
-
-        logger.info("Task Finished.")
+            # --- 兜底逻辑 ---
+            # 如果什么都没发现，可能是加载中，稍微等一下
+            self.device.sleep(0.5)

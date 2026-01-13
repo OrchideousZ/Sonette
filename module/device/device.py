@@ -25,6 +25,25 @@ from module.exception import (
 )
 from module.logger import logger
 
+from module.ocr.paddle_ocr import ocr_agent
+
+
+def crop_image(image, box):
+    """
+    简单的图片裁剪函数
+    Args:
+        image: OpenCV 图像 (numpy array)
+        box: (x1, y1, x2, y2)
+    """
+    x1, y1, x2, y2 = map(int, box)
+    h, w = image.shape[:2]
+    # 边界保护，防止报错
+    x1 = max(0, x1)
+    y1 = max(0, y1)
+    x2 = min(w, x2)
+    y2 = min(h, y2)
+    return image[y1:y2, x1:x2]
+
 class YoloTarget:
     """
     一个极简的点击目标包装类，专门骗过 ALAS 的 click 函数
@@ -319,7 +338,7 @@ class Device(Screenshot, Control, AppControl):
         self.click_record_clear()
 
     # =========================================================================
-    # YOLO AI Extensions (Fixed Version)
+    # YOLO AI Extensions
     # =========================================================================
 
     def yolo_find(self, target_label, conf=0.5):
@@ -371,3 +390,74 @@ class Device(Screenshot, Control, AppControl):
             return True
 
         return False
+
+    def scan_screen(self, conf=0.5):
+        """
+        [感知] 全屏扫描
+        一次性对当前屏幕进行推理，返回所有检测到的目标。
+
+        Returns:
+            list: 检测结果列表, e.g.
+                  [{'label': 'btn_start', 'conf': 0.9, 'box': [...], 'center': (x,y)},
+                   {'label': 'btn_cancel', 'conf': 0.8, ...}]
+            dict: 标签索引字典, 方便快速查询 e.g. {'btn_start': <item>, 'btn_cancel': <item>}
+        """
+        screenshot = self.screenshot()
+        detections = yolo_agent.predict(screenshot, conf_thres=conf)
+
+        # 生成一个字典方便快速查找是否存在某个标签
+        # 注意：如果同屏有多个相同标签，字典只会存最后一个 (通常对于UI按钮够用了)
+        detections_map = {item['label']: item for item in detections}
+
+        return detections, detections_map
+
+    def click_result(self, item, sleep_time=1):
+        """
+        [行动] 点击扫描到的结果
+        Args:
+            item (dict): scan_screen 返回列表中的某一项
+        """
+        if not item:
+            return False
+
+        label = item['label']
+        box = tuple(item['box'])
+
+        # 实例化轻量级对象 (鸭子类型)
+        target = YoloTarget(box=box, name=label)
+
+        logger.info(f'YOLO Click: {label} @ {box} (Conf: {item["conf"]:.2f})')
+
+        self.click(target)
+        self.handle_control_check(target)
+        self.sleep(sleep_time)
+        return True
+
+    def ocr_yolo_box(self, yolo_item):
+        """
+        对 YOLO 识别到的某个目标区域进行 OCR 文字识别
+        Args:
+            yolo_item (dict): yolo_find 返回的结果字典
+        Returns:
+            str: 识别到的文本 (已去除空格)
+        """
+        if not yolo_item:
+            return ""
+
+        # 1. 获取当前屏幕截图
+        # 注意：这里直接用 self.image，假设在调用此方法前已经执行过 screenshot()
+        # 如果不确定，可以再次调用 self.screenshot()
+        image = self.image
+
+        # 2. 裁剪区域 (box: x1, y1, x2, y2)
+        box = yolo_item['box']
+        crop = crop_image(image, box)
+
+        # 3. OCR 识别
+        text = ocr_agent.predict(crop)
+
+        # 4. 清理文本 (去掉空格，方便转数字)
+        clean_text = text.replace(" ", "")
+        logger.info(f"OCR Result [{yolo_item['label']}]: {clean_text}")
+
+        return clean_text
