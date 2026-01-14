@@ -1,5 +1,9 @@
 # Sonette
-Return to The Future 1999 Copilot
+A "Return to The Future: 1999" Copilot
+
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![OpenCV](https://img.shields.io/badge/opencv-%23white.svg?style=for-the-badge&logo=opencv&logoColor=white)
+![YOLO](https://img.shields.io/badge/YOLO-111F68?style=for-the-badge&logo=yolo&logoColor=white)
 
 基于全新ALAS框架构造的重返未来1999小助手(base: StarRailCopilot v0.5.7)
 
